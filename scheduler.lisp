@@ -22,15 +22,13 @@
   (queue nil)
   (processed-tasks nil))
 
-(defvar *max-time-needed* 10)
-
-(defun gen-tasks (tasks-num intensity-modifier)
-  (let ((max-arrival-time (floor (/ (* tasks-num *max-time-needed*)
+(defun gen-tasks (tasks-num &key (intensity-modifier 3) (max-time-needed 10))
+  (let ((max-arrival-time (floor (/ (* tasks-num max-time-needed)
                                     intensity-modifier))))
     (labels ((%gen-tasks (tasks-num id)
                (if (= 0 tasks-num)
                    nil
-                   (cons (let ((time-needed (1+ (random *max-time-needed*)))
+                   (cons (let ((time-needed (1+ (random max-time-needed)))
                                (arrival-time (1+ (random max-arrival-time))))
                            (make-task :id id
                                       :arrival-time arrival-time
@@ -38,7 +36,7 @@
                                       :time-left time-needed
                                       :waiting-time 0))
                          (%gen-tasks (1- tasks-num) (1+ id))))))
-      (cons (let ((time-needed (1+ (random *max-time-needed*))))
+      (cons (let ((time-needed (1+ (random max-time-needed))))
               (make-task :id 0
                          :arrival-time 0
                          :time-needed time-needed
@@ -183,12 +181,15 @@
   (print-graph processed tasks-num)
   (print-report processed tasks-num))
 
-(defun test (&key (num 10) (report nil) (intensity-modifier 3))
+(defun test (&key (num 10) (report nil) (intensity-modifier 3) (max-time-needed 10))
   (multiple-value-bind (new-scheduler-ctx downtime)
       (run
        (make-scheduler-context
         :arrival->tasks-ht
-        (mk-ht (gen-tasks num intensity-modifier) #'task-arrival-time)
+        (mk-ht (gen-tasks num
+                          :intensity-modifier intensity-modifier
+                          :max-time-needed max-time-needed)
+               #'task-arrival-time)
         :cur-time 0))
     (let* ((processed (scheduler-context-processed-tasks new-scheduler-ctx))
            (observation-time (task-end-time (car processed)))
@@ -200,9 +201,14 @@
                         :initial-value 0)
                 observation-time)))
       (when report (print-graph-report processed num))
-      (format t "~12,8F ~12,8F ~3D~%" intensity mid-wait-time downtime)
+      (format t "~12,8F , ~12,8F , ~3D~%" intensity mid-wait-time downtime)
       (values intensity mid-wait-time downtime))))
 
-(defun tests (&key (times 100) (num 200) (intensity-modifier 3))
-  (loop for i from 1 to times do
-    (test :num num :intensity-modifier intensity-modifier)))
+(defun tests (&key (times 100) (num 20) (intensity-modifier 3) (max-time-needed 10) (max-time-needed-step nil))
+  (let ((max-time-needed max-time-needed))
+    (loop for i from 1 to times do
+      (test :num num
+            :intensity-modifier intensity-modifier
+            :max-time-needed (if max-time-needed-step
+                                 (+ max-time-needed (floor (/ i max-time-needed-step)))
+                                 max-time-needed)))))
